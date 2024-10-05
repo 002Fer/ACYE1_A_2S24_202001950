@@ -35,9 +35,18 @@
         .asciz "1. Ingreso de lista de números\n"
         .asciz "2. Bubble Sort\n"
         .asciz "3. Insertion sort\n"
-        .asciz "4. Salir\n"
+        .asciz "4. otro\n"
+        .asciz "5. Salir\n"
         .asciz ">> Ingrese Una Opcion:\n"
         lenMenu = . - menuPrincipal
+
+    menuCarga:
+        .asciz ">> Metodo de  carga\n"
+        .asciz "1. De forma manual\n"
+        .asciz "2. Carga de Archivo csv\n"
+        .asciz "3. Regresar al menú anterior\n"
+        .asciz ">> Ingrese Una Opcion:\n"
+        lenCarga = . - menuCarga
 
     msgFilename:
         .asciz "Ingrese el nombre del archivo: "
@@ -51,7 +60,7 @@
         .asciz "El Archivo Se Ha Leido Correctamente\n"
         lenReadSuccess = .- readSuccess
     inputOperacion:
-        .asciz ">> Ingrese La Operacion: "
+        .asciz ">> Ingrese el listado: "
         lenInputOperacion = . - inputOperacion
     salirMensaje:
     .asciz "¿Desea salir de la calculadora? (y/n): "
@@ -59,6 +68,9 @@
 
 .bss
 opcion:
+    .space 5
+
+opcion2:
     .space 5
 
 filename:
@@ -75,6 +87,8 @@ character:
 
 fileDescriptor:
     .space 8
+bufferConfirmacion:
+    .space 2
 
 array:
 
@@ -360,7 +374,6 @@ bubbleSort:
         BNE bs_loop1
     RET
 
-// Etiqueta de inicio del programa
 _start:
     // Limpiar salida de la terminal
     print clear_screen, lenClear
@@ -369,9 +382,91 @@ _start:
     
     print encabezado, lencabezado 
     read2 opcion, 1
-    print clear_screen, lenClear
 
-    print menuPrincipal, lenMenu
+    menu:
+        print clear_screen, lenClear
+
+        print menuPrincipal, lenMenu //cargo el menu principal
+        read2 opcion, 5
+
+        LDR x12, =opcion
+        LDRB w12, [x12]
+        CMP w12, 52      //comparo si es la opcion de salida 
+        BEQ confirmar_salir
+
+        CMP w12,49 //compara si es la opcion 1 y se va al submenu
+        BEQ menu2
+
+        CMP w12, 50
+        BEQ orden_bubble
+        
+
+        
+        menu2: //carga de archivo
+            print clear_screen, lenClear
+            print menuCarga,lenCarga
+            read2 opcion2, 5
+
+            LDR x12, =opcion2
+            LDRB w12, [x12]
+            CMP w12, 49     //si es la opcion 1 se pasa a listadoArr
+            BEQ listadoArr
+
+            CMP w12, 50
+            BEQ cargaCSV
+
+            BL menu
+
+            listadoArr: //ingreso del listado separado por comas 
+                print inputOperacion, lenInputOperacion
+                read2 opcion2, 5
+            
+            cargaCSV:
+                print msgFilename, lenMsgFilename
+                read 0, filename, 50
+                // Agregar caracter nulo al final del nombre del archivo
+                 LDR x0, =filename
+                 loop:
+                    LDRB w1, [x0], 1
+                    CMP w1, 10
+                    BEQ endLoop
+                    B loop
+
+                    endLoop:
+                        MOV w1, 0
+                        STRB w1, [x0, -1]!
+
+                    // funcion para abrir el archivo
+                LDR x1, =filename
+                BL openFile 
+                    
+                    // procedimiento para leer los numeros del archivo
+                BL readCSV
+
+                    // funcion para cerrar el archivo
+                BL closeFile 
+        
+    orden_bubble:
+
+        BL convert_array_to_ascii
+
+                    
+    confirmar_salir:
+        print salirMensaje, lenSalirMensaje
+        read2 bufferConfirmacion, 5
+
+        LDR x0, =bufferConfirmacion 
+        LDRB w2, [x0]              
+        CMP w2, 121                  
+        BEQ end
+
+        BL menu
+    end:
+        MOV x0, 0
+        MOV x8, 93
+        SVC 0
+
+/* 
     // Mensaje para ingresar el nombre del archivo
     print msgFilename, lenMsgFilename
     read 0, filename, 50
@@ -408,4 +503,4 @@ _start:
     end:
         MOV x0, 0
         MOV x8, 93
-        SVC 0
+        SVC 0 */
