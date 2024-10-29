@@ -4,8 +4,8 @@
 .global atoi
 .global itoa
 .global bubbleSort
-.global convert_array_to_ascii
 .global _start
+
 
 .data
     nombre: .asciz "reporte.txt"
@@ -18,7 +18,7 @@
         .asciz "Fernando Misael Morales Ortiz\n"
         .asciz "202001950\n"
         lencabezado = . - encabezado
-    
+      
     salto:
         .asciz "\n"
         lenSalto = .- salto
@@ -105,11 +105,13 @@ fileDescriptor:
     .space 8
 bufferConfirmacion:
     .space 2
-
+inputBuffer:
+    .space 100  // Buffer para almacenar la entrada del usuario
 array:
 
 .text
-
+.global ingreso_por_comas
+.global convert_array_to_ascii
 // Macro para imprimir strings
 .macro print reg, len
     MOV x0, 1
@@ -135,6 +137,97 @@ array:
     MOV x8, 63
     SVC 0
 .endm
+
+readNUM:
+    // code para leer numero y convertir
+    LDR x10, =num    // Buffer para almacenar el numero
+    LDR x11, =inputBuffer
+
+    rd_num_manual:
+        LDRB w3, [x11], 1
+        CMP w3, 44
+        BEQ rd_cv_num_manual
+        CMP w3, 0
+        BEQ rd_cv_num_manual_end
+
+        MOV x20, x0
+        CBZ x0, rd_cv_num_manual
+
+        STRB w3, [x10], 1
+        B rd_num_manual
+
+ rd_cv_num_manual:
+        LDR x5, =num
+        LDR x8, =num
+        LDR x12, =array
+
+        STP x29, x30, [SP, -16]!
+
+        BL atoi
+
+        LDP x29, x30, [SP], 16
+
+        LDR x12, =num
+        MOV w13, 0
+        MOV x14, 0
+
+        cls_num_manual:
+            STRB w13, [x12], 1
+            ADD x14, x14, 1
+            CMP x14, 3
+            BNE cls_num_manual
+            LDR x10, =num
+            CBNZ x20, rd_num_manual
+
+
+    rd_cv_num_manual_end:
+        // Procesar el último número
+        LDR x5, =num
+        LDR x8, =num
+        LDR x12, =array
+
+        STP x29, x30, [SP, -16]!
+
+        BL atoi
+
+        LDP x29, x30, [SP], 16
+
+        LDR x12, =num
+        MOV w13, 0
+        MOV x14, 0
+
+        cls_num_manual_end:
+            STRB w13, [x12], 1
+            ADD x14, x14, 1
+            CMP x14, 3
+            BNE cls_num_manual_end
+
+    rd_end_manual:
+        print salto, lenSalto
+        RET
+clear_array:
+    LDR x0, =array
+    MOV x1, 0
+    MOV x2, 400  // Tamaño del array en bytes
+ingreso_por_comas:
+    MOV x12, xzr
+    print clear_screen, lenClear
+    // Limpiar el array antes de ingresar nuevos datos
+    BL clear_array
+    // Mensaje para ingresar los números
+    print inputOperacion, lenInputOperacion
+    read 0, inputBuffer, 100
+    // Agregar caracter nulo al final del buffer
+    LDR x0, =inputBuffer
+    loop1:
+        LDRB w1, [x0], 1
+        CMP w1, 10
+        BEQ endLoop1
+        B loop1
+
+        endLoop1:
+            MOV w1, 0
+            STRB w1, [x0, -1]!
 
 openFile:
     // param: x1 -> filename
@@ -423,8 +516,6 @@ bubbleSort2:
         CMP x1, x0
         BNE _loop1
     RET
-
-
 // Procedimiento para Insertion Sort
 
 insertionSort:
@@ -465,49 +556,6 @@ is_insert:
 
     RET
 
-// Procedimiento para Insertion Sort descendente
-
-insertionSort2:
-    LDR x0, =count
-    LDR x0, [x0]  // length => cantidad de números leídos del CSV
-
-    MOV x1, 1  // Empezar desde el segundo elemento (índice 1)
-    SUB x0, x0, 1  // length - 1
-
-isloop1:
-    LDR x2, =array
-    ADD x3, x2, x1, LSL 1  // Puntero a array[i]
-    LDRH w4, [x3]  // array[i]
-    MOV x5, x1  // j = i
-
-isloop2:
-    SUB x5, x5, 1  // j--
-    CMP x5, 0
-    BGT isinsert
-
-    LDRH w6, [x2, x5, LSL 1]  // array[j-1] - Leer el valor del elemento
-    CMP w6, w4
-    BLE isinsert
-
-    // Shift array[j-1] a la derecha
-    ADD x7, x5, 1
-    STRH w6, [x2, x7, LSL 1]  // Escribir el valor en la posición j
-
-    B isloop2
-
-isinsert:
-    ADD x7, x5, 1
-    STRH w4, [x2, x7, LSL 1]  // Insertar w4 en la posición correcta
-
-    ADD x1, x1, 1
-    CMP x1, x0
-    BLE isloop1
-
-    RET
-
-
-
-
 _start:
     // Limpiar salida de la terminal
     print clear_screen, lenClear
@@ -546,34 +594,14 @@ _start:
 
             LDR x12, =opcion2
             LDRB w12, [x12]
-            CMP w12, 49     //si es la opcion 1 se pasa a listadoArr
-            BEQ listadoArr
+            CMP w12, #'1'     //si es la opcion 1 se pasa a listadoArr
+            BEQ ingreso_por_comas
 
             CMP w12, 50
             BEQ cargaCSV
 
-            BL menu
+            B menu
 
-            listadoArr: //ingreso del listado separado por comas 
-                print inputOperacion, lenInputOperacion
-                read2 opcion2, 50
-                LDR x0, =opcion2
-
-                //leer la entrada del usuario
-                MOV x0, 0
-                LDR x1, =buffer
-                MOV x2, 100
-                MOV x8,63
-                SVC 0
-
-                // Convertir la cadena de entrada en números y almacenarlos en 'array'
-                LDR x1, =buffer
-                LDR x2, =array
-                BL process_input
-            process_input:
-                MOV x3, 0            // Contador de números
-                MOV x4, 0
-            B menu            // Número temporal
 
             cargaCSV:
                 print clear_screen, lenClear
@@ -604,39 +632,22 @@ _start:
                 B menu
         
     orden_bubble:
-        BL bubbleSort
-        BL convert_array_to_ascii
+        print menu3, lenmenu3
+        read2 opcion2, 5
+        LDR x12, =opcion2
+        LDRB w12, [x12]
+        CMP w12, #'1'     //si es la opcion 1 se pasa a listadoArr
+        BEQ desc
+
         
-        reporte:
-            mov x0, -100        // open
-            ldr x1, =nombre   // filename address
-            mov x2, 101         // O_WRONLY | O_CREATE
-            mov x3, 0777        // permissions
-            mov x8, 56          // openat
-            svc #0              // syscall
-            mov x9, x0          // store file descriptor
+        desc:
+            BL bubbleSort
 
-            // write file
-            mov x0, x9          // file descriptor
-            ldr x1, =buffer     // buffer address
-            ldr x2, =array       // Load the size address
-            ldr x2, [x2] 
-            mov x8, 64          // write
-            svc 0               // syscall
-
-            // close file
-            mov x0, x9          // file descriptor
-            mov x8, 57          // close
-            svc 0               // syscall
-
-            // exit
-            mov x0, 0           // return vale
-            mov x8, 93          // exit
-            svc 0               // syscall
+        // recorrer array y convertir a ascii
+            BL convert_array_to_ascii
         B menu
-
     orden_insert:
-        BL insertionSort2
+        BL insertionSort
         BL convert_array_to_ascii      
     confirmar_salir:
         print salirMensaje, lenSalirMensaje
@@ -653,41 +664,3 @@ _start:
         MOV x8, 93
         SVC 0
 
-/* 
-    // Mensaje para ingresar el nombre del archivo
-    print msgFilename, lenMsgFilename
-    read 0, filename, 50
-    
-    // Agregar caracter nulo al final del nombre del archivo
-     LDR x0, =filename
-     loop:
-         LDRB w1, [x0], 1
-         CMP w1, 10
-         BEQ endLoop
-         B loop
-
-         endLoop:
-             MOV w1, 0
-             STRB w1, [x0, -1]!
-
-    // funcion para abrir el archivo
-    LDR x1, =filename
-    BL openFile 
-    
-    // procedimiento para leer los numeros del archivo
-    BL readCSV
-
-    // funcion para cerrar el archivo
-    BL closeFile 
-
-    // Llamar Algoritmo de Ordenamiento Burbuja
-    BL bubbleSort
-
-    // recorrer array y convertir a ascii
-    BL convert_array_to_ascii
-
-    // Instruccion para terminar el programa
-    end:
-        MOV x0, 0
-        MOV x8, 93
-        SVC 0 */
