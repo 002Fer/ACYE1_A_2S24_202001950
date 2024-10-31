@@ -1,5 +1,11 @@
 .global itoa
 .global atoi
+
+.global openFile
+.global closeFile
+
+.global readCSV
+.global convert_array_to_ascii
 .global _start
 .data
 
@@ -10,12 +16,20 @@ clear_screen:
 msg: 
     .asciz "Hola Mundo!!\n"
 
+errorSuma:
+    .asciz "Error En El Comando De Suma"
+    lenErrorSuma = .- errorSuma
+
 encabezado_columnas:
     .asciz "          A             B             C              D              E             F            G           H            I            J            K   \n"
     lenEncabezadoColumnas = .- encabezado_columnas
 
-value:  .asciz "00000000000"
+value:  .asciz "000000000000"
     lenValue = .- value // SE ENCARGARA DE GUARDAR EL VALOR DE CADA CELDA (UNICAMENTE 13 espacios)
+errorImport:
+    .asciz "Error En El Comando De Importación"
+    lenError = .- errorImport
+
 encabezado:
     .asciz "Universidad de San Carlos de Guatemala\n"
     .asciz "Facultad de Ingenieria\n"
@@ -32,8 +46,19 @@ salto:  .asciz "\n"
     lenSalto = .- salto
 
 ingresoComando:
-    .asciz ":"
+    .asciz "Ingrese Comando:"
     lenIngresoComando = .- ingresoComando   // Unicamente se colocan 2 pts para pedir el ingreso del comando
+    msgFilename:
+        .asciz "Ingrese el nombre del archivo: "
+        lenMsgFilename = .- msgFilename
+
+    errorOpenFile:
+        .asciz "Error al abrir el archivo\n"
+        lenErrOpenFile = .- errorOpenFile
+
+    readSuccess:
+        .asciz "El Archivo Se Ha Leido Correctamente\n"
+        lenReadSuccess = .- readSuccess
 
 msgIngresarValor:
     .asciz "Ingresar un valor para @@@:"
@@ -46,8 +71,45 @@ prueba:  .asciz "9223372036854775807\0"
 // cualquier_numero:
    // .asciz "159\0"
 .bss
+
+// Almacenar el número de iteraciones
+iteraciones:
+    .word 0
+
+bufferResultado:
+    .zero 10
 opcion:
     .space 5
+
+opcion2:
+    .space 5
+
+filename:
+    .zero 50
+
+count:
+    .zero 8
+
+
+character:
+    .byte 0
+
+fileDescriptor:
+    .space 8
+bufferConfirmacion:
+    .space 2
+op1:
+    .zero 2
+
+op2:
+    .zero 2
+bufferComando:
+    .zero 50
+arreglo:
+    .rept 36
+    .hword 0
+    .endr
+ 
 
 tablero:
     .skip 253 * 8   // Esta variable es nuestra matriz de 23 * 11 que tiene 64 bits cada numero
@@ -72,6 +134,8 @@ param1:
 posicion_param1:
     .skip 1
 
+pResultado:
+    .skip 8
 param2:
     .skip 8         // Reservar 8 bytes (64 bits) sin inicializar, variable que guarda un numero de 64 bits, uso general
 
@@ -80,8 +144,32 @@ posicion_param2:
 
 fila64:
     .skip 8         // Reservar 8 bytes (64 bits) sin inicializar, guarda fila que se este trabajando (puede ser de uso general)
+array:
 .text
+// Macro para imprimir strings
+.macro print reg, len
+    MOV x0, 1
+    LDR x1, =\reg
+    MOV x2, \len
+    MOV x8, 64
+    SVC 0
+.endm
 
+// Macro para leer datos del usuario
+.macro read stdin, buffer, len
+    MOV x0, \stdin
+    LDR x1, =\buffer
+    MOV x2, \len
+    MOV x8, 63
+    SVC 0
+.endm
+.macro read2 reg, len
+    MOV x0, 0
+    LDR x1, =\reg
+    MOV x2, \len
+    MOV x8, 63
+    SVC 0
+.endm
 // Macro para imprimir strings
 .macro mPrint reg, len
     MOV x0, 1
@@ -146,14 +234,83 @@ fila64:
     MOV x8, 63
     SVC 0
 .endm
-.macro read reg, len
-    MOV x0, 0
-    LDR x1, =\reg
-    MOV x2, \len
-    MOV x8, 63
-    SVC 0
-.endm
 
+
+
+openFile:
+    // param: x1 -> filename
+    MOV x0, -100
+    MOV x2, 0
+    MOV x8, 56
+    SVC 0
+
+    CMP x0, 0
+    BLE op_f_error
+    LDR x9, =fileDescriptor
+    STR x0, [x9]
+    B op_f_end
+
+    op_f_error:
+        print errorOpenFile, lenErrOpenFile
+        read 0, opcion, 1
+
+    op_f_end:
+        RET
+
+closeFile:
+    LDR x0, =fileDescriptor
+    LDR x0, [x0]
+    MOV x8, 57
+    SVC 0
+    RET
+
+readCSV:
+    // code para leer numero y convertir
+    LDR x10, =num    // Buffer para almacenar el numero
+    LDR x11, =fileDescriptor
+    LDR x11, [x11]
+
+    rd_num:
+        read x11, character, 1
+        LDR x4, =character
+        LDRB w3, [x4]
+        CMP w3, 44
+        BEQ rd_cv_num
+
+        MOV x20, x0
+        CBZ x0, rd_cv_num
+
+        STRB w3, [x10], 1
+        B rd_num
+
+    rd_cv_num:
+        LDR x5, =num
+        LDR x8, =num
+        LDR x12, =array
+
+        STP x29, x30, [SP, -16]!
+
+        BL atoi
+
+        LDP x29, x30, [SP], 16
+
+        LDR x12, =num
+        MOV w13, 0
+        MOV x14, 0
+
+        cls_num:
+            STRB w13, [x12], 1
+            ADD x14, x14, 1
+            CMP x14, 3
+            BNE cls_num
+            LDR x10, =num
+            CBNZ x20, rd_num
+
+    rd_end:
+        print salto, lenSalto
+        print readSuccess, lenReadSuccess
+        read 0, opcion, 2
+        RET
 
 imprimirCeldas:
     mPrint encabezado_columnas, lenEncabezadoColumnas
@@ -421,11 +578,14 @@ verificarComando:
     LDRB w20, [x0], #1  // Se carga el primer caracter en w20
     CMP w20, #'G'          // Compara el carácter con 'G'
     BEQ guardar           // Si es igual, salta a guardar
+    CMP w20, #'S'          // Compara el carácter con 'S'
+    BEQ sumar
     CMP w20, #'L'          // Compara el carácter con 'L'
     BEQ llenar           // Si es igual, salta a guardar
     CMP w20, #'I'          // Compara el carácter con 'I'
     BEQ importar           // Si es igual, salta a guardar
     B fin_verificar     // Si no encuentra ningun comando marcar error
+
     guardar:
         LDRB w20, [x0], #1  // Se sigue avanzando en el buffer (comando)
         CMP w20, #'U'          // Compara el carácter con 'U'
@@ -458,6 +618,29 @@ verificarComando:
         MOV w4, 1   // w4=1 (Comando Guardar encontrado)
         B fin_verificar     // Si no encuentra ningun comando marcar error
 
+    sumar:
+        LDRB w20, [x0], #1  // Se sigue avanzando en el buffer (comando)
+        CMP w20, #'U'          // Compara el carácter con 'U'
+        BNE fin_verificar           // Si no es igual, salta a fin_verificar
+
+        LDRB w20, [x0], #1
+        CMP w20, #'M'          // Compara el carácter con 'M'
+        BNE fin_verificar           // Si es igual, salta a fin_verificar
+
+        LDRB w20, [x0], #1
+        CMP w20, #'A'          // Compara el carácter con 'A'
+        BNE fin_verificar           // Si es igual, salta a fin_verificar
+        
+        LDRB w20, [x0], #1
+        CMP w20, #'R'          // Compara el carácter con 'R'
+        BNE fin_verificar           // Si es igual, salta a fin_verificar
+
+        LDRB w20, [x0], #1
+        CMP w20, #' '          // Compara el carácter con ' '
+        BNE fin_verificar           // Si es igual, salta a fin_verificar
+
+        MOV w4, 20  // w4=1 (Comando Guardar encontrado)
+        B fin_verificar     // Si no encuentra ningun comando marcar error
     llenar:
         LDRB w20, [x0], #1  // Se sigue avanzando en el buffer (comando)
         CMP w20, #'L'          // Compara el carácter con 'U'
@@ -546,15 +729,31 @@ verificarComando:
         B fin_verificar     // Si no encuentra ningun comando marcar error
     fin_verificar:
     RET
+verificarASTERISCO:
+    LDRB w20, [x0], #1      // Se carga el valor de memoria de x0 en w20
+    CMP w20, #'*' 
+    BEQ ASTERISCO 
+
+    ASTERISCO:
+        LDRB w20, [x0], #1
+        CMP w20, #' '          // Compara el carácter con ' '
+        BNE fin_verificarast           // Si es igual, salta a fin_verificar_intermedia
+
+        MOV w4, 11 // w4=1 palabra intermedia EN encontrada
+        B fin_verificarast
+    fin_verificarast:
+    RET
 
 verificarPalabraIntermedia:
     // Retorna en w4, el tipo de palabra intermedia
     LDRB w20, [x0], #1      // Se carga el valor de memoria de x0 en w20
     CMP w20, #'E'          // Compara el carácter con 'E'
     BEQ en           // Si es igual, salta a en
+    CMP w20, #'Y'          // Compara el carácter con 'Y'
+    BEQ in           // Si es igual, salta a en
     CMP w20, #'H'          // Compara el carácter con 'H'
     BEQ hasta           // Si es igual, salta a en
-    CMP w20, #'S'          // Compara el carácter con 'H'
+    CMP w20, #'S'          // Compara el carácter con 'S'
     BEQ separado_por           // Si es igual, salta a en
     B fin_verificar_intermedia
     en:
@@ -564,6 +763,14 @@ verificarPalabraIntermedia:
 
         LDRB w20, [x0], #1
         CMP w20, #' '          // Compara el carácter con 'E'
+        BNE fin_verificar_intermedia           // Si es igual, salta a fin_verificar_intermedia
+
+        MOV w4, 1 // w4=1 palabra intermedia EN encontrada
+        B fin_verificar_intermedia
+    in:
+
+        LDRB w20, [x0], #1
+        CMP w20, #' '          // Compara el carácter con ' '
         BNE fin_verificar_intermedia           // Si es igual, salta a fin_verificar_intermedia
 
         MOV w4, 1 // w4=1 palabra intermedia EN encontrada
@@ -708,6 +915,75 @@ itoa:
         CBNZ x8, i_almacenar
         // B i_almacenar
     i_endConversion:
+        
+        RET
+itoa2:
+    MOV x10, 0
+    MOV x12, 0
+    MOV w2, 10000
+    CMP w0, 0
+    BGT i_convertirAscii2
+
+    CMP w0, 0
+    BEQ i_zero2
+
+    B i_negative2
+
+    i_zero2:
+        ADD x10, x10, 1
+        MOV w5, 48
+        STRB w5, [x1], 1
+        B i_endConversion2
+
+    i_negative2:
+        MOV  x12, 1
+        MOV w5, 45
+        STRB w5, [x1], 1
+        NEG w0, w0
+
+    i_convertirAscii2:
+        UDIV w3, w0, w2
+        CBZ w3, i_reduceBase2
+
+        CMP w2, 1
+        BLE i_unidades2
+
+        MOV w5, w3
+        ADD w5, w5, 48
+        STRB w5, [x1], 1
+        ADD x10, x10, 1
+
+        MUL w3, w3, w2
+        SUB w0, w0, w3
+
+        i_reduceBase2:
+            MOV w6, 10
+            UDIV w2, w2, w6
+
+            CMP w2, 1
+            BLE i_unidades2
+
+            CBNZ w10, i_addZero2
+            B i_convertirAscii2
+
+        i_addZero2:
+            CBNZ w3, i_convertirAscii2
+            ADD x10, x10, 1
+            MOV w5, 48
+            STRB w5, [x1], 1
+            B i_convertirAscii2
+
+        i_unidades2:
+            CMP w2, 1
+            BGT i_convertirAscii2
+            ADD x10, x10, 1
+            MOV w5, w0
+            ADD w5, w5, 48
+            STRB w5, [x1], 1
+
+    i_endConversion2:
+        ADD x10, x10, x12
+        print bufferResultado, x10
         RET
 
 parametroNumero:
@@ -818,11 +1094,23 @@ llenarFilaColumna:
         CMP x3, 0
         BGE loop_llenar
     RET
+proc_cls_num:
+    LDR x0, =num
+    MOV x1, 1
+
+    loop_cls:
+        STRH wzr, [x0], 1
+        ADD x1, x1, 1
+        CMP x1, 8
+        BNE loop_cls
+
+        RET
+
 _start:
     
     mPrint clear_screen, lenClear
     mPrint encabezado, lencabezado
-    read opcion, 1
+    read2 opcion, 1
     // imprimir_hoja:
         //mImprimirCeldas
         // mImprimirValores
@@ -846,25 +1134,49 @@ _start:
         LDR x9, =posicion_param1
         BL parametroNumero
 
-        BL verificarPalabraIntermedia
-        BL limpiarParametro
-        // Este es el segundo parametro
-        BL verificarParametro
-        LDR x8, =param2
-        LDR x9, =posicion_param2
-        BL parametroNumero
 
-        ADR x0, tipo_comando
-        LDRB w2, [x0]
+            BL verificarPalabraIntermedia
+            BL limpiarParametro
+            // Este es el segundo parametro
+            BL verificarParametro
+            LDR x8, =param2
+            LDR x9, =posicion_param2
+            BL parametroNumero
 
-        CMP w2, 1
-        BEQ concluir_guardar
-        CMP w2, 11
-        BEQ concluir_llenar
-        CMP w2, 15
-        BEQ concluir_importar
-        
-        B final
+            ADR x0, tipo_comando
+            LDRB w2, [x0]
+
+            CMP w2, 1
+            BEQ concluir_guardar
+            CMP w2, 5
+            BEQ concluir_guardarASTR
+            CMP w2, 11
+            BEQ concluir_llenar
+            CMP w2, 15
+            BEQ concluir_importar
+            CMP w2, 20
+            BEQ concluir_SUMAR
+    
+            
+            B final
+    concluir_guardarASTR:
+        LDR x8, =pResultado
+        LDR x9, [x8]
+
+        LDR x11, =param2
+        LDR x10, [x11]
+
+        ADRP x25, tablero
+        ADD  x25, x25, :lo12:tablero       // Sumar el offset para la dirección completa
+        STR  x9, [x25, x5, lsl 3]
+        B fin_programa
+        cls_buffer_cmd2:
+            STRB wzr, [x0], 1
+            ADD x1, x1, 1
+
+            CMP x1, 50
+            BNE cls_buffer_cmd2
+  
     concluir_guardar:
         LDR x8, =param1
         LDR x9, [x8]
@@ -876,6 +1188,29 @@ _start:
         ADD  x25, x25, :lo12:tablero       // Sumar el offset para la dirección completa
         STR  x9, [x25, x5, lsl 3]
         B fin_programa
+        cls_buffer_cmd:
+            STRB wzr, [x0], 1
+            ADD x1, x1, 1
+
+            CMP x1, 50
+            BNE cls_buffer_cmd
+
+      // Sumar DOS CELDAS    
+    concluir_SUMAR:
+        LDR x8, =param1
+        LDR x9, [x8]
+
+        LDR x11, =param2
+        LDR x10, [x11]
+
+        ADD x12, x9,x10
+        LDR x13,=pResultado
+        STR x12,[x13]
+        mPrint pResultado, 2
+        B printResultado
+
+        
+        
     concluir_llenar:
         ADR x2, posicion_param1
         LDRB w0, [x2]
@@ -934,6 +1269,15 @@ _start:
     concluir_importar:
         mPrint param1, 5
         B final
+    printResultado:
+        MOV x0, 0
+        MOV w0, w3
+        LDR x1, =bufferResultado
+
+        BL itoa2
+        read2 opcion, 1
+        B fin_programa
+
     fin_programa:
         B ingreso_comando
         mov x0, 0
