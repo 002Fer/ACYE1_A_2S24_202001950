@@ -6,6 +6,12 @@
 # Fernando Misael Morales Ortiz
 ## 202001950
 
+## Descripcion
+la aplicación trata sobre hojas de cálculo realizadas en el lenguaje Ensamblador.
+Dicho software permitirá manejar datos numéricos por medio de diversas operaciones
+matemáticas y lógicas, operando sobre datos puntuales o rangos. Se interactuará con
+el programa a través de una interfaz de línea de comandos por la cual se instruirá al
+programa sobre las acciones que debe realizar
 ## Organización del Código
 ## .data (Segmento de Datos)
 
